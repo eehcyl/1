@@ -432,7 +432,8 @@ baud_ready:
     esp_last_error = ESP8266_ONENET_ERROR_JOIN_AP;
     return 0U;
   }
-  if (ESP8266_WaitForEither("WIFI GOT IP", "OK", 25000U) == 0U)
+  // 修复：WiFi连接超时从25秒改为60秒
+  if (ESP8266_WaitForEither("WIFI GOT IP", "OK", 60000U) == 0U)
   {
     esp_last_error = ESP8266_ONENET_ERROR_JOIN_AP;
     return 0U;
@@ -496,7 +497,8 @@ static uint8_t ESP8266_ConnectMQTT(void)
   {
     (void)snprintf(cmd, sizeof(cmd), "AT+MQTTCONN=0,\"%s\",%u,1",
                    mqtt_hosts[i], (unsigned int)ONENET_MQTT_PORT);
-    if (ESP8266_SendCommand(cmd, "+MQTTCONNECTED", 30000U) != 0U)
+    // 修复：MQTT连接超时从30秒改为60秒
+    if (ESP8266_SendCommand(cmd, "+MQTTCONNECTED", 60000U) != 0U)
     {
       break;
     }
