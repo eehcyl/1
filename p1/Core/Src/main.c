@@ -36,6 +36,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+// 修复：添加OneNet上传间隔定义（30秒上传一次）
+#define ONENET_UPLOAD_INTERVAL_MS  30000U
 
 /* USER CODE END PD */
 
@@ -139,7 +141,8 @@ int main(void)
 	// LCD ???
 	Lcd_Init();
 	Lcd_Clear(BLACK);
-	ESP8266_OneNET_Init(&huart3);
+	// 修复1：使用正确的UART接口 - ESP-01S连接在USART2上，不是USART3
+	ESP8266_OneNET_Init(&huart2);
 	// ??????
 	
 	
@@ -211,8 +214,8 @@ int main(void)
 	{AHT20_Read(&temp, &humi);
 		
 		// ??? OneNET ???????
-		temperature = temp;
-		humidity = humi;
+		temperature = (int16_t)temp;
+		humidity = (int16_t)humi;
 		
 		BMP280_Read(&press_hPa, &bmp_temp_c);
 		(void)bmp_temp_c;
@@ -296,12 +299,14 @@ int main(void)
 		LCD_Show_String(32, 128, "E:");
 		LCD_Show_Num(48, 128, ESP8266_OneNET_GetLastError(), 2);
 		
+		// 修复2：定期调用任务函数处理连接
 		ESP8266_OneNET_Task();
 
+        // 修复3：定期上传数据到OneNET
         if ((HAL_GetTick() - last_onenet_upload) >= ONENET_UPLOAD_INTERVAL_MS)
         {
             last_onenet_upload = HAL_GetTick();
-            (void)ESP8266_OneNET_PostTempHumi(temperature,humidity);
+            (void)ESP8266_OneNET_PostTempHumi((float)temperature, (float)humidity);
         }
 		HAL_Delay(100);
 		/* USER CODE END WHILE */
@@ -392,7 +397,7 @@ void Error_Handler(void)
  * @brief  Reports the name of the source file and the source line number
  *         where the assert_param error has occurred.
  * @param  file: pointer to the source file name
- * @param  line: assert_param error line source number
+ * @param  line: assert_param line source number
  * @retval None
  */
 void assert_failed(uint8_t *file, uint32_t line)
