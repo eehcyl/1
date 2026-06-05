@@ -42,7 +42,7 @@
 #include "Fan.h"
 #include "led_mode.h"
 
-//#include "TM1640.h"
+#include "TM1640.h"
 
 #define READ_TEMP_HUMI_MSG_EVT  0x0001
 #define SEND_TEMP_HUMI_MSG_EVT  0x0002
@@ -142,6 +142,11 @@ uint8 SampleApp_TransID;  // This is the unique message ID (counter)
 
 afAddrType_t Point_To_Point_DstAddr;//点对点通信定义
 afAddrType_t Boardcast_DstAddr;//点对点通信定义
+
+// 缓存温湿度数据，避免频繁读取传感器
+uint8 g_cached_temp = 0;
+uint8 g_cached_humi = 0;
+
 /*********************************************************************
  * LOCAL FUNCTIONS
  */
@@ -182,7 +187,7 @@ void SampleApp_Init( uint8 task_id )
   // 注册端点
   afRegister( &EndDevice_epDesc );
   //开始本地显示温湿度数值
-  osal_start_timerEx( SampleApp_TaskID, READ_TEMP_HUMI_MSG_EVT,1000);
+  osal_start_timerEx( SampleApp_TaskID, READ_TEMP_HUMI_MSG_EVT, 1000);
 }
 
 /*********************************************************************
@@ -223,8 +228,13 @@ uint16 SampleApp_ProcessEvent( uint8 task_id, uint16 events )
           if ((SampleApp_NwkState == DEV_ROUTER)
              ||(SampleApp_NwkState == DEV_END_DEVICE) )
           {
-            printf("connect coordinator\r\n");            
-            osal_start_timerEx( SampleApp_TaskID, SEND_TEMP_HUMI_MSG_EVT,2000);
+            printf("connect coordinator\r\n");
+            
+            // 启动显示更新定时器（500ms更新一次）
+            osal_start_timerEx(SampleApp_TaskID, READ_TEMP_HUMI_MSG_EVT, 500);
+            
+            // 启动数据发送定时器（2000ms发送一次）
+            osal_start_timerEx(SampleApp_TaskID, SEND_TEMP_HUMI_MSG_EVT, 2000);
           }
           break;
 
@@ -246,25 +256,28 @@ uint16 SampleApp_ProcessEvent( uint8 task_id, uint16 events )
   
   if(events & READ_TEMP_HUMI_MSG_EVT)
   {
-    //读取传感器数据并合并显示在数码管上
-    uint8 temp = SHT2x_GetTemp();
-    uint8 humi = SHT2x_GetHumi();
-    uint16 displayData = temp * 100 + humi;  // 温度在高8位，湿度在低8位
+    // 直接使用缓存的温湿度值，不重新读取传感器，避免阻塞
+    uint16 displayData = g_cached_temp * 100 + g_cached_humi;
     
-    /*调用send_LED_Display显示合并的温湿度数据，type=4表示显示4位数据*/
+    // 调用send_LED_Display显示合并的温湿度数据，type=4表示显示4位数据
     send_LED_Display(0xc0, displayData, 4);
     
-    printf("Temperature=%dC, Humidity=%d%%\r\n", temp, humi);
+    printf("Temperature=%dC, Humidity=%d%%\r\n", g_cached_temp, g_cached_humi);
     
-    /*启动定时器1000ms后超时,触发一次READ_TEMP_HUMI_MSG_EVT事件*/
-    osal_start_timerEx( SampleApp_TaskID, READ_TEMP_HUMI_MSG_EVT, 1000);
+    // 启动定时器500ms后超时，触发一次READ_TEMP_HUMI_MSG_EVT事件
+    osal_start_timerEx(SampleApp_TaskID, READ_TEMP_HUMI_MSG_EVT, 500);
   }
   
-  if(events & SEND_TEMP_HUMI_MSG_EVT)//是SEND_TEMP_HUMI_MSG_EVT事件
+  if(events & SEND_TEMP_HUMI_MSG_EVT)
   {
-    SendTemperatureHumityToCoordinator();//向协调器发送温湿度数据  
-		/*启动定时器2000ms后超时，触发一次SEND_TEMP_HUMI_MSG_EVT事件*/    
-    osal_start_timerEx( SampleApp_TaskID, SEND_TEMP_HUMI_MSG_EVT,2000);
+    // 在这里读取一次传感器，更新缓存
+    g_cached_temp = SHT2x_GetTemp();
+    g_cached_humi = SHT2x_GetHumi();
+    
+    SendTemperatureHumityToCoordinator();
+    
+    // 启动定时器2000ms后超时，触发一次SEND_TEMP_HUMI_MSG_EVT事件
+    osal_start_timerEx(SampleApp_TaskID, SEND_TEMP_HUMI_MSG_EVT, 2000);
   }
   return 0;
 }
@@ -296,9 +309,16 @@ void SampleApp_MessageMSGCB( afIncomingMSGPacket_t *pkt )
 void SendTemperatureHumityToCoordinator(void)
 {
 	uint8 sendbuf[2];
-	sendbuf[0] = SHT2x_GetTemp();
-	sendbuf[1] = SHT2x_GetHumi();
-	if ( AF_DataRequest( &Point_To_Point_DstAddr,&EndDevice_epDesc,
+	
+	// 使用缓存的温湿度值
+	sendbuf[0] = g_cached_temp;
+	sendbuf[1] = g_cached_humi;
+	
+	// 同时更新数码管显示
+	uint16 displayData = g_cached_temp * 100 + g_cached_humi;
+	send_LED_Display(0xc0, displayData, 4);
+	
+	if ( AF_DataRequest( &Point_To_Point_DstAddr, &EndDevice_epDesc,
 		TEMP_HUMI_CLUSTERID,
 		2,
 		sendbuf,
