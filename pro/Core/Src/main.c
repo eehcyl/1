@@ -29,6 +29,7 @@
 #include "esp8266_onenet.h"
 #include "common.h"
 #include "mqttkit.h"
+#include "NanoEdgeAI.h"
 //#include "NanoEdgeAI.h"
 /* USER CODE END Includes */
 
@@ -52,8 +53,9 @@
 
 /* USER CODE BEGIN PV */
 
-RTC_TimeTypeDef sTime;
-RTC_DateTypeDef sDate;
+//RTC_TimeTypeDef sTime;
+//RTC_DateTypeDef sDate;
+
 // MAX30102 ??
 uint16_t HeartRate = 0;
 float SpO2 = 0;
@@ -80,10 +82,10 @@ uint8_t sr501_detected = 0;
 DS1302_TIME ds1302_time;
 
 // NanoEdge AI
-//enum neai_state neai_state;
-//bool use_pretrained = false;
-//uint8_t similarity;
-//float input_signal[NEAI_INPUT_SIGNAL_LENGTH * NEAI_INPUT_AXIS_NUMBER];
+enum neai_state neai_state;
+bool use_pretrained = true;
+uint8_t similarity;
+float input_signal[NEAI_INPUT_SIGNAL_LENGTH * NEAI_INPUT_AXIS_NUMBER];
 
 float temperature,humidity,lux,spo2;
 int heartrate;
@@ -97,15 +99,26 @@ uint8_t Uart2_RxData = 0;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void RTC_SetTime(uint8_t hh, uint8_t mm, uint8_t ss);
-void RTC_GetNowTime(void);
 
+//void RTC_SetTime(uint8_t hh, uint8_t mm, uint8_t ss);
+//void RTC_GetNowTime(void);
+void fill_buffer(float *input_signal);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 static uint16_t last_hr = 0;
 static float last_spo2 = 0;
+float temp, humi;
+
+void fill_buffer(float *input_signal)
+{
+    // ??????????????
+    // ?? NanoEdgeAI.h ??:3? x 1?? = 3? float ?
+    input_signal[0] = temp;           // ?1:??
+    input_signal[1] = humi;           // ?2:??
+    input_signal[2] = bh1750_lux;     // ?3:????
+}
 
 int fputc(int ch, FILE *f)
 {
@@ -157,6 +170,7 @@ int main(void)
 	// LCD ???
 	Lcd_Init();
 	Lcd_Clear(BLACK);
+	
 	ESP8266_OneNET_Init(&huart3);
 	
 	// AHT20 ???
@@ -204,12 +218,12 @@ int main(void)
 	
 	
 	// NanoEdge AI
-	//neai_state = neai_anomalydetection_init(use_pretrained);
-	//if (neai_state == NEAI_OK) {
-	//	LCD_Show_String(0, 64, "AI OK");
-	//} else {
-	//	LCD_Show_String(0, 64, "AI ERR");
-	//}
+	neai_state = neai_anomalydetection_init(use_pretrained);
+	if (neai_state == NEAI_OK) {
+		LCD_Show_String(0, 64, "AI OK");
+	} else {
+		LCD_Show_String(0, 64, "AI ERR");
+	}
 	
 	HAL_Delay(1000);
 	Lcd_Clear(BLACK);
@@ -217,7 +231,7 @@ int main(void)
 	//MAX30102 FIFO
 	cache_counter = 0;
 	
-	float temp, humi;
+	
 	
 	/* USER CODE END 2 */
 	
@@ -342,21 +356,6 @@ int main(void)
 			sprintf(lcd_buf, "BODY: NO ");
 		LCD_Show_String(0, 128, lcd_buf);
 		
-		//OneNet
-		LCD_Show_String(0, 144, "S:");
-		LCD_Show_Num(16, 144, ESP8266_OneNET_GetStatus(), 1);
-		LCD_Show_String(32, 144, "E:");
-		LCD_Show_Num(48, 144, ESP8266_OneNET_GetLastError(), 2);
-		
-		
-		ESP8266_OneNET_Task();
-
-        if ((HAL_GetTick() - last_onenet_upload) >= ONENET_UPLOAD_INTERVAL_MS)
-        {
-            last_onenet_upload = HAL_GetTick();
-            (void)ESP8266_OneNET_PostTempHumi(temperature,humidity,lux,heartrate,spo2);
-        }
-		
 		// PC2 ????
 		if(sr501_detected)
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
@@ -391,6 +390,29 @@ int main(void)
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);  // PC10?
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);  // PC11????
 		}
+		
+		//OneNet
+		LCD_Show_String(0, 144, "S:");
+		LCD_Show_Num(16, 144, ESP8266_OneNET_GetStatus(), 1);
+		LCD_Show_String(32, 144, "E:");
+		LCD_Show_Num(48, 144, ESP8266_OneNET_GetLastError(), 2);
+		
+		
+		ESP8266_OneNET_Task();
+
+        if ((HAL_GetTick() - last_onenet_upload) >= ONENET_UPLOAD_INTERVAL_MS)
+        {
+            last_onenet_upload = HAL_GetTick();
+            (void)ESP8266_OneNET_PostTempHumi(temperature,humidity,lux,heartrate,spo2);
+        }
+				
+		// NanoEdge AI
+		fill_buffer(input_signal);
+		neai_anomalydetection_detect(input_signal, &similarity);
+		
+		// ?LCD???AI??
+		sprintf(lcd_buf, "SIM:%3d%%", similarity);
+		LCD_Show_String(0, 144, lcd_buf);
 		
 		HAL_Delay(100);
 		/* USER CODE END WHILE */
