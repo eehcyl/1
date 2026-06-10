@@ -238,7 +238,7 @@ uint16 SampleApp_ProcessEvent( uint8 task_id, uint16 events )
 */
 void SampleApp_MessageMSGCB( afIncomingMSGPacket_t *pkt )
 { 
-	uint8 ShowCombinedBuf[]="TempHumi=xxxx";
+	uint8 ShowCombinedBuf[20]="TempHumi=    ";
 	
 	switch ( pkt->clusterId )
 	{
@@ -260,6 +260,8 @@ void SampleApp_MessageMSGCB( afIncomingMSGPacket_t *pkt )
 			ShowCombinedBuf[12] = humi/10 + 0x30;      // 湿度十位
 			ShowCombinedBuf[13] = humi%10 + 0x30;      // 湿度个位
 			
+                        ShowCombinedBuf[14] = '\0';
+                        
 			OLED_P8x16Str(0,4,ShowCombinedBuf);        // OLED显示：TempHumi=2658
 			
 			printf("OLED Display: %s\r\n", ShowCombinedBuf);
