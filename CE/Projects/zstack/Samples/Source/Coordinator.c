@@ -127,10 +127,10 @@ devStates_t SampleApp_NwkState;
 
 uint8 SampleApp_TransID;  // This is the unique message ID (counter)
 
-afAddrType_t Point_To_Point_DstAddr;//µã¶ÔµãÍ¨ĞÅ¶¨Òå
+afAddrType_t Point_To_Point_DstAddr;//ç‚¹å¯¹ç‚¹é€šä¿¡å®šä¹‰
 
-afAddrType_t Boardcast_DstAddr;//µã¶ÔµãÍ¨ĞÅ¶¨Òå
-void SampleApp_MessageMSGCB( afIncomingMSGPacket_t *pckt );//½ÓÊÕµ½ÎŞÏßÏûÏ¢»Øµ÷º¯Êı
+afAddrType_t Boardcast_DstAddr;//ç‚¹å¯¹ç‚¹é€šä¿¡å®šä¹‰
+void SampleApp_MessageMSGCB( afIncomingMSGPacket_t *pckt );//æ¥æ”¶åˆ°æ¶ˆæ¯å›è°ƒå‡½æ•°
 /*********************************************************************
  * @fn      SampleApp_Init
  *
@@ -150,16 +150,16 @@ void SampleApp_Init( uint8 task_id )
   SampleApp_TaskID = task_id;
   SampleApp_NwkState = DEV_INIT;
   SampleApp_TransID = 0;  
-	UartInit(HAL_UART_PORT_1,HAL_UART_BR_115200);//µ÷ÊÔ´®¿Ú³õÊ¼»¯
-  OLED_Init();                    //³õÊ¼»¯OLED 
-  OLED_P8x16Str(0,0,"coordinator");//OLEDÏÔÊ¾ÌáÊ¾ĞÅÏ¢
+	UartInit(HAL_UART_PORT_1,HAL_UART_BR_115200);//è°ƒè¯•ä¸²å£åˆå§‹åŒ–
+  OLED_Init();                    //åˆå§‹åŒ–OLED 
+  OLED_P8x16Str(0,0,"coordinator");//OLEDæ˜¾ç¤ºæç¤ºä¿¡æ¯
    
-  // ÌîĞ´¶Ëµã
+  // å¡«å†™ç«¯ç‚¹
   Coordinator_epDesc.endPoint   = SAMPLEAPP_ENDPOINT;
   Coordinator_epDesc.task_id    = &SampleApp_TaskID;
   Coordinator_epDesc.simpleDesc = (SimpleDescriptionFormat_t *)&Coordinator_SimpleDesc;
   Coordinator_epDesc.latencyReq = noLatencyReqs;
-  // ×¢²á¶Ëµã
+  // æ³¨å†Œç«¯ç‚¹
   afRegister( &Coordinator_epDesc );
 }
 
@@ -238,21 +238,33 @@ uint16 SampleApp_ProcessEvent( uint8 task_id, uint16 events )
 */
 void SampleApp_MessageMSGCB( afIncomingMSGPacket_t *pkt )
 { 
-	uint8 ShowTemperatureBuf[ ]="temperture=xxC";
-	uint8 ShowHumiBuf[ ]="humidity=xx%";
+	uint8 ShowCombinedBuf[]="TempHumi=xxxx";
+	
 	switch ( pkt->clusterId )
 	{
-		case TEMP_HUMI_CLUSTERID://ÊÇÎÂÊª¶ÈÊı¾İÃüÁîÂë
-		ShowTemperatureBuf[11] = pkt->cmd.Data[0]/10 + 0x30;//HEX ×ª³ÉASCII
-		ShowTemperatureBuf[12] = pkt->cmd.Data[0]%10 + 0x30;//HEX ×ª³ÉASCII 
-		printf("Temperature=%dC\r\n",pkt->cmd.Data[0]);//´®¿Ú´òÓ¡
-		OLED_P8x16Str(0,4,ShowTemperatureBuf);//OLEDÆÁÏÔÊ¾ 
-		
-		ShowHumiBuf[9]  = pkt->cmd.Data[1]/10 + 0x30;//HEX ×ª³ÉASCII
-		ShowHumiBuf[10] = pkt->cmd.Data[1]%10 + 0x30;//HEX ×ª³ÉASCII 
-		printf("Humidity=%d%%\r\n",pkt->cmd.Data[1]);//´®¿Ú´òÓ¡        
-		OLED_P8x16Str(0,6,ShowHumiBuf);//OLEDÆÁÏÔÊ¾  
-		break;
+		case TEMP_HUMI_CLUSTERID:  // æ¥æ”¶ç»„åˆçš„æ¸©æ¹¿åº¦æ•°æ®
+			// æ–°æ•°æ®æ ¼å¼ï¼šsendbuf[0]=temperature, sendbuf[1]=humidity
+			// æˆ‘ä»¬éœ€è¦ç»„åˆæ˜¾ç¤ºï¼šæ¸©åº¦åœ¨å‰ä¸¤ä½ï¼Œæ¹¿åº¦åœ¨åä¸¤ä½
+			uint8 temp = pkt->cmd.Data[0];     // æ¸©åº¦å€¼
+			uint8 humi = pkt->cmd.Data[1];     // æ¹¿åº¦å€¼
+			
+			// ç»„åˆæ•°æ®ç”¨äºæ˜¾ç¤ºï¼ˆæ¸©åº¦*100+æ¹¿åº¦ï¼‰
+			uint16 displayData = temp * 100 + humi;
+			
+			printf("Received - Temperature=%dC, Humidity=%d%%\r\n", temp, humi);
+			printf("Combined Data=%d (display as 4-digit: %04d)\r\n", displayData, displayData);
+			
+			// OLEDæ˜¾ç¤ºï¼šæ¸©åº¦å’Œæ¹¿åº¦åˆ†åˆ«æ˜¾ç¤º
+			ShowCombinedBuf[10] = temp/10 + 0x30;      // æ¸©åº¦åä½
+			ShowCombinedBuf[11] = temp%10 + 0x30;      // æ¸©åº¦ä¸ªä½
+			ShowCombinedBuf[12] = humi/10 + 0x30;      // æ¹¿åº¦åä½
+			ShowCombinedBuf[13] = humi%10 + 0x30;      // æ¹¿åº¦ä¸ªä½
+			
+			OLED_P8x16Str(0,4,ShowCombinedBuf);        // OLEDæ˜¾ç¤ºï¼šTempHumi=2658
+			
+			printf("OLED Display: %s\r\n", ShowCombinedBuf);
+			
+			break;
 	}
 }
 /*********************************************************************
