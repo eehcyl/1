@@ -26,11 +26,11 @@
 #include "bsp_i2c.h"
 #include "DS1302.h"
 #include "string.h"
+#include "cam.h"
 #include "esp8266_onenet.h"
 #include "common.h"
 #include "mqttkit.h"
 #include "NanoEdgeAI.h"
-//#include "NanoEdgeAI.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -63,6 +63,7 @@ float max30102_data[2] = {0};
 float fir_output[2] = {0};
 uint8_t data_ready = 0;
 char lcd_buf[32];
+uint8_t esp32_result[64] = {0};
 
 //MQ135
 uint32_t mq135_adc_value = 0;      // ADC??? (0-4095)
@@ -157,7 +158,7 @@ int main(void)
 	/* Initialize all configured peripherals */
 	MX_GPIO_Init();
 	MX_I2C1_Init();            // MAX30102
-	//MX_USART2_UART_Init();
+	MX_USART2_UART_Init();     // ESP32S3CAM
 	MX_USART3_UART_Init();     // ESP-01S
 	MX_I2C2_Init();            // AHT20 + BMP280
 	MX_I2C3_Init();
@@ -216,6 +217,7 @@ int main(void)
 		bh1750_ok = 0;
 	}
 	
+	cam_init();
 	
 	// NanoEdge AI
 	neai_state = neai_anomalydetection_init(use_pretrained);
@@ -239,6 +241,7 @@ int main(void)
 	/* USER CODE BEGIN WHILE */
 	while (1)
 	{
+		Lcd_Clear(BLACK);
 		AHT20_Read(&temp, &humi);
 		DS1302_ReadTime(&ds1302_time);
 		
@@ -273,6 +276,7 @@ int main(void)
 		sr501_status = HAL_GPIO_ReadPin(SR501_OUT_GPIO_Port, SR501_OUT_Pin);
 		sr501_detected = (sr501_status == GPIO_PIN_SET) ? 1 : 0;
 		
+		
 		// CH340
 		char uart_buf[96];
 		sprintf(uart_buf, "TEMP:%.1f,HUMI:%.1f,MQ135:%.2fV,ALARM:%d,S:%d,E:%d\r\n",
@@ -291,22 +295,23 @@ int main(void)
             HAL_UART_Transmit(&huart1, (uint8_t*)uart_buf, strlen(uart_buf), 1000);
         }
 		
+		
 		//DS1302
 		sprintf(lcd_buf, "TIME:%02d:%02d:%02d", ds1302_time.hour, ds1302_time.min, ds1302_time.sec);
 		LCD_Show_String(0, 0, lcd_buf);
 		
 		//AHT20
 		sprintf(lcd_buf, "TEMP:%.1f C", temp);
-		LCD_Show_String(0, 16, lcd_buf);
+		LCD_Show_String(0, 14, lcd_buf);
 		sprintf(lcd_buf, "HUMI:%.1f %%", humi);
-		LCD_Show_String(0, 32, lcd_buf);
+		LCD_Show_String(0, 28, lcd_buf);
 		
 		// BH1750 
 		if(bh1750_ok)
 			sprintf(lcd_buf, "LUX:%.1f lx", bh1750_lux);
 		else
 			sprintf(lcd_buf, "LUX: --- lx");
-		LCD_Show_String(0, 48, lcd_buf);
+		LCD_Show_String(0, 42, lcd_buf);
 		
 		//MAX30102
 		if (HeartRate < 1u)
@@ -323,7 +328,7 @@ int main(void)
 			sprintf(lcd_buf, "HR:%3d~bpm", last_hr);
 		else
 			sprintf(lcd_buf, "HR: ---bpm");
-		LCD_Show_String(0, 64, lcd_buf);
+		LCD_Show_String(0, 56, lcd_buf);
 		
 		if (SpO2 < 1.0f)
 		{
@@ -339,22 +344,78 @@ int main(void)
 			sprintf(lcd_buf, "SPO2:%3.1f~%%", last_spo2);
 		else
 			sprintf(lcd_buf, "SPO2: ---%%");
-		LCD_Show_String(0, 80, lcd_buf);
+		LCD_Show_String(0, 70, lcd_buf);
 		
 		//MQ135
-		sprintf(lcd_buf, "MQ135:%.2fV", mq135_voltage);
-		LCD_Show_String(0, 96, lcd_buf);
+		//sprintf(lcd_buf, "MQ135:%.2fV", mq135_voltage);
+		//LCD_Show_String(0, 96, lcd_buf);
 		if (mq135_alarm == 0)
-			LCD_Show_String(0, 112, "AIR:POOR");
+			LCD_Show_String(0, 84, "AIR:POOR");
 		else
-			LCD_Show_String(0, 112, "AIR:GOOD");
+			LCD_Show_String(0, 84, "AIR:GOOD");
+		
+		//ESP32
+		static uint8_t cam_last_display = CAM_VACANT;
+
+		if (cam_data_ready)
+		{
+			cam_data_ready = 0;
+			cam_last_display = cam_detection;
+		}
+
+		/* ========== ESP32S3CAM  ========== */
+		switch (cam_last_display)
+		{
+			case CAM_VACANT:
+				sprintf(lcd_buf, "BODY:VACANT");
+				LCD_Show_String(0, 98, lcd_buf);
+				sprintf(lcd_buf, "POSTURE:N/A");
+				LCD_Show_String(0, 112, lcd_buf);
+				break;
+
+			case CAM_SUPINE:
+				sprintf(lcd_buf, "BODY:OCCUPIED");
+				LCD_Show_String(0, 98, lcd_buf);
+				sprintf(lcd_buf, "POSTURE:SUPINE");
+				LCD_Show_String(0, 112, lcd_buf);
+				break;
+
+			case CAM_SIDE:
+				sprintf(lcd_buf, "BODY:OCCUPIED");
+				LCD_Show_String(0, 98, lcd_buf);
+				sprintf(lcd_buf, "POSTURE:SIDE");
+				LCD_Show_String(0, 112, lcd_buf);
+				break;
+
+			case CAM_PRONE:
+				sprintf(lcd_buf, "BODY:OCCUPIED");
+				LCD_Show_String(0, 98, lcd_buf);
+				sprintf(lcd_buf, "POSTURE:PRONE");
+				LCD_Show_String(0, 112, lcd_buf);
+				break;
+
+			case CAM_FACE_COVERED:
+				sprintf(lcd_buf, "BODY:OCCUPIED");
+				LCD_Show_String(0, 98, lcd_buf);
+				sprintf(lcd_buf, "POSTURE:FACE-COVERED");
+				LCD_Show_String(0, 112, lcd_buf);
+				break;
+
+			case CAM_OCCUPIED:
+			default:
+				sprintf(lcd_buf, "BODY:OCCUPIED");
+				LCD_Show_String(0, 98, lcd_buf);
+				sprintf(lcd_buf, "POSTURE:UNKNOWN");
+				LCD_Show_String(0, 112, lcd_buf);
+				break;
+		}
 		
 		// HC-SR501
 		if(sr501_detected)
 			sprintf(lcd_buf, "BODY: YES");
 		else
 			sprintf(lcd_buf, "BODY: NO ");
-		LCD_Show_String(0, 128, lcd_buf);
+		LCD_Show_String(0, 126, lcd_buf);
 		
 		// PC2 ????
 		if(sr501_detected)
@@ -392,11 +453,10 @@ int main(void)
 		}
 		
 		//OneNet
-		LCD_Show_String(0, 144, "S:");
-		LCD_Show_Num(16, 144, ESP8266_OneNET_GetStatus(), 1);
-		LCD_Show_String(32, 144, "E:");
-		LCD_Show_Num(48, 144, ESP8266_OneNET_GetLastError(), 2);
-		
+		LCD_Show_String(0, 140, "S:");
+		LCD_Show_Num(16, 140, ESP8266_OneNET_GetStatus(), 1);
+		LCD_Show_String(32, 140, "E:");
+		LCD_Show_Num(48, 140, ESP8266_OneNET_GetLastError(), 2);
 		
 		ESP8266_OneNET_Task();
 
@@ -412,8 +472,11 @@ int main(void)
 		
 		// ?LCD???AI??
 		sprintf(lcd_buf, "SIM:%3d%%", similarity);
-		LCD_Show_String(0, 144, lcd_buf);
+		LCD_Show_String(0, 154, lcd_buf);
 		
+		
+		
+				
 		HAL_Delay(100);
 		/* USER CODE END WHILE */
 		
