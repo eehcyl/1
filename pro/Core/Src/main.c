@@ -53,9 +53,6 @@
 
 /* USER CODE BEGIN PV */
 
-//RTC_TimeTypeDef sTime;
-//RTC_DateTypeDef sDate;
-
 // MAX30102 ??
 uint16_t HeartRate = 0;
 float SpO2 = 0;
@@ -64,6 +61,7 @@ float fir_output[2] = {0};
 uint8_t data_ready = 0;
 char lcd_buf[32];
 uint8_t esp32_result[64] = {0};
+
 
 //MQ135
 uint32_t mq135_adc_value = 0;      // ADC??? (0-4095)
@@ -218,6 +216,7 @@ int main(void)
 	}
 	
 	cam_init();
+
 	
 	// NanoEdge AI
 	neai_state = neai_anomalydetection_init(use_pretrained);
@@ -474,7 +473,7 @@ int main(void)
 		sprintf(lcd_buf, "SIM:%3d%%", similarity);
 		LCD_Show_String(0, 152, lcd_buf);
 		
-		Lcd_Clear(BLACK);
+		//Lcd_Clear(BLACK);
 		HAL_Delay(100);
 		/* USER CODE END WHILE */
 		
@@ -536,6 +535,7 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+
 
 /* USER CODE END 4 */
 
