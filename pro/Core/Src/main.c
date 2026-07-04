@@ -62,6 +62,7 @@ uint8_t data_ready = 0;
 char lcd_buf[32];
 uint8_t esp32_result[64] = {0};
 
+uint8_t white_led_state = 0;
 
 //MQ135
 uint32_t mq135_adc_value = 0;      // ADC??? (0-4095)
@@ -244,6 +245,60 @@ int main(void)
 		AHT20_Read(&temp, &humi);
 		DS1302_ReadTime(&ds1302_time);
 		
+		static uint8_t alarm_state = 0;  // 0:??  1:??
+    static uint8_t last_button_state = GPIO_PIN_RESET;  // ????????
+    uint8_t button_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1);
+
+    // ???????(??????)
+    if(button_state == GPIO_PIN_SET && last_button_state == GPIO_PIN_RESET)
+    {
+        HAL_Delay(20);  // ????
+        button_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1);
+        if(button_state == GPIO_PIN_SET)
+        {
+            alarm_state = !alarm_state;  // ????
+        }
+    }
+    last_button_state = button_state;
+        
+    // ???????????
+    if(alarm_state)
+    {
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);  // PC10?
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_SET);  // PC11????
+    }
+    else
+    {
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);  // PC10?
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);  // PC11????
+    }
+        
+    // PC0????,??PC1??(???????)
+    static uint8_t last_pc0_state = GPIO_PIN_RESET;  // ????????
+    uint8_t pc0_state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_0);
+        
+    // ???????(??????)
+    if(pc0_state == GPIO_PIN_SET && last_pc0_state == GPIO_PIN_RESET)
+    {
+        HAL_Delay(20);  // ????
+        pc0_state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_0);
+        if(pc0_state == GPIO_PIN_SET)
+        {
+            white_led_state = !white_led_state;  // ????
+        }
+    }
+    last_pc0_state = pc0_state;
+        
+    // ??????PC1??
+    if(white_led_state)
+    {
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);  // PC1?
+    }
+    else
+    {
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);  // PC1?
+    }
+		
 		//OneNET
 		temperature = temp;
 		humidity = humi;
@@ -422,10 +477,6 @@ int main(void)
 		else
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
 		
-		// PC12????,??PC10??PC11???(???????)
-		static uint8_t alarm_state = 0;  // 0:??  1:??
-		static uint8_t last_button_state = GPIO_PIN_RESET;  // ????????
-		uint8_t button_state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_12);
 		
 		// ???????(??????)
 		if(button_state == GPIO_PIN_SET && last_button_state == GPIO_PIN_RESET)
