@@ -241,7 +241,7 @@ int main(void)
 	/* USER CODE BEGIN WHILE */
 	while (1)
 	{
-		Lcd_Clear(BLACK);
+		
 		AHT20_Read(&temp, &humi);
 		DS1302_ReadTime(&ds1302_time);
 		
@@ -472,16 +472,13 @@ int main(void)
 		
 		// ?LCD???AI??
 		sprintf(lcd_buf, "SIM:%3d%%", similarity);
-		LCD_Show_String(0, 154, lcd_buf);
+		LCD_Show_String(0, 152, lcd_buf);
 		
-		
-		
-				
+		Lcd_Clear(BLACK);
 		HAL_Delay(100);
 		/* USER CODE END WHILE */
 		
 		
-				
 		/* USER CODE BEGIN 3 */
 	}
 	/* USER CODE END 3 */
