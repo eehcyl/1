@@ -28,7 +28,7 @@
 #include "edge-impulse-sdk/dsp/image/image.hpp"
 
 #include "esp_camera.h"
-#include <Wire.h>
+
 // Select camera model - find more camera models in camera_pins.h file here
 // https://github.com/espressif/arduino-esp32/blob/master/libraries/ESP32/examples/Camera/CameraWebServer/camera_pins.h
 
@@ -82,21 +82,11 @@
 #define EI_CAMERA_RAW_FRAME_BUFFER_COLS           320
 #define EI_CAMERA_RAW_FRAME_BUFFER_ROWS           240
 #define EI_CAMERA_FRAME_BYTE_SIZE                 3
-#define I2C_SLAVE_ADDR                            0x50  // I2C 地址（可自定义 0x50-0x57）
-#define I2C_BUFFER_SIZE                           64
 
 /* Private variables ------------------------------------------------------- */
 static bool debug_nn = false; // Set this to true to see e.g. features generated from the raw signal
 static bool is_initialised = false;
 uint8_t *snapshot_buf; //points to the output of the capture
-
-uint8_t i2c_tx_buffer[I2C_BUFFER_SIZE] = {0};  // I2C 发送缓冲区
-uint8_t result_ready = 0;  // 标志：推理结果已准备
-
-// I2C 从设备接收回调（NUCLEO 读取数据时调用）
-void onRequest() {
-    Wire.write(i2c_tx_buffer, I2C_BUFFER_SIZE);
-}
 
 static camera_config_t camera_config = {
 	.pin_pwdn = PWDN_GPIO_NUM,
@@ -145,11 +135,6 @@ void setup()
 	Serial.begin(115200);
 	//comment out the below line to start inference immediately after upload
 	while (!Serial);
-
-  // 初始化 I2C 从设备（SDA=8, SCL=9 for ESP32-S3）
-	Wire.onRequest(onRequest);
-	Wire.begin(I2C_SLAVE_ADDR, 8, 9, 400000);  // 地址, SDA, SCL, 速率
-
 	Serial.println("Edge Impulse Inferencing Demo");
 	if (ei_camera_init() == false) {
 		ei_printf("Failed to initialize Camera!\r\n");
@@ -202,34 +187,6 @@ void loop()
 		return;
 	}
 	
-  // ========== 新增：将结果写入 I2C 缓冲区 ==========
-	memset(i2c_tx_buffer, 0, I2C_BUFFER_SIZE);
-	int offset = 0;
-	
-	// 写入推理标签和概率
-	for (uint16_t i = 0; i < EI_CLASSIFIER_LABEL_COUNT && offset < I2C_BUFFER_SIZE - 4; i++) {
-		uint8_t label_len = strlen(ei_classifier_inferencing_categories[i]);
-		if (offset + label_len + 5 > I2C_BUFFER_SIZE) break;
-		
-		// 格式: [标签长度][标签字符串][概率(4字节浮点)]
-		i2c_tx_buffer[offset++] = label_len;
-		memcpy(&i2c_tx_buffer[offset], ei_classifier_inferencing_categories[i], label_len);
-		offset += label_len;
-		
-		float prob = result.classification[i].value;
-		memcpy(&i2c_tx_buffer[offset], &prob, 4);
-		offset += 4;
-		
-		if (offset + 1 >= I2C_BUFFER_SIZE) break;
-	}
-	
-	result_ready = 1;  // 标记结果已准备
-	
-	// 打印到串口（用于调试）
-	ei_printf("I2C Result Ready: offset=%d\n", offset);
-  
-  free(snapshot_buf);
-
 	// print the predictions
 	ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n",
 		result.timing.dsp, result.timing.classification, result.timing.anomaly);
