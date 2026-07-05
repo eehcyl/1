@@ -1,5 +1,6 @@
 #include "esp8266_onenet.h"
-
+#include "usart.h"
+#include "LCD_Driver.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -19,6 +20,41 @@ static const uint32_t esp_baud_list[] = {
   57600U,
   38400U
 };
+
+/* ---------- ????:? esp_rx_buffer ??? LCD(??? 28 ??) ---------- */
+static void ESP8266_Display_LastResponse(const char *title)
+{
+    char out[32] = {0};
+
+    /* ?? esp_rx_buffer ? out */
+    if (esp_rx_buffer != NULL) {
+        strncpy(out, esp_rx_buffer, sizeof(out) - 1);
+    }
+
+    /* ????????? title + ??,????? LCD ???? */
+    LCD_Show_String(0, 160, (char*)title);   // ????
+    LCD_Show_String(0, 176, out);            // ????(??)
+}
+
+static void ESP8266_DebugPrint(const char *tag)
+{
+    char hdr[64];
+    size_t len;
+
+    if (tag != NULL) {
+        snprintf(hdr, sizeof(hdr), "\r\n[ESPDBG] %s\r\n", tag);
+        HAL_UART_Transmit(&huart1, (uint8_t*)hdr, strlen(hdr), 200);
+    }
+
+    /* print the raw response buffer (may be empty) */
+    len = strlen(esp_rx_buffer);
+    if (len > 0) {
+        HAL_UART_Transmit(&huart1, (uint8_t*)esp_rx_buffer, (uint16_t)len, 500);
+        HAL_UART_Transmit(&huart1, (uint8_t*)"\r\n", 2, 100);
+    } else {
+        HAL_UART_Transmit(&huart1, (uint8_t*)"[empty]\r\n", 9, 100);
+    }
+}
 
 static uint8_t ESP8266_IsConfigured(void)
 {
@@ -668,6 +704,10 @@ uint8_t ESP8266_OneNET_PostTempHumi(float temperature, float humidity, float lux
   {
     esp_status = ESP8266_ONENET_STATUS_OFFLINE;
     esp_last_error = ESP8266_ONENET_ERROR_PUBLISH;
+		
+		/* ??:??????????? LCD */
+    ESP8266_Display_LastResponse("PUBLISH FAIL");
+		
     return 0U;
   }
 

@@ -14,7 +14,7 @@
 #define ONENET_MQTT_HOST_BACKUP       ONENET_PRODUCT_ID ".mqtts.acc.cmcconenet.cn"
 #define ONENET_MQTT_HOST_BACKUP2      "studio-mqtt.heclouds.com"
 #define ONENET_MQTT_PORT              1883U
-#define ONENET_UPLOAD_INTERVAL_MS     10000U
+#define ONENET_UPLOAD_INTERVAL_MS     60000U
 #define ESP8266_ENABLE_LOOPBACK_TEST  0U
 
 typedef enum
