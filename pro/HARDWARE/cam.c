@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include "LCD_Driver.h"
 
 extern UART_HandleTypeDef huart2;
 
@@ -15,6 +16,11 @@ static uint16_t rx_idx = 0;
 static uint8_t  rx_char;
 static float    frame_max_conf = 0.0f;
 static char     frame_best_label[32] = {0};
+/* Debug counters for visual verification */
+static uint32_t dbg_init_count = 0;
+static uint32_t dbg_rx_cb_count = 0;
+static uint32_t dbg_lines_parsed = 0;
+static uint32_t dbg_detect_confirmed = 0;
 
 static int cam_strcasestr(const char *haystack, const char *needle)
 {
@@ -153,6 +159,15 @@ static void cam_apply_detection(const char *best_label, float max_conf)
     }
 
     cam_data_ready = 1;
+
+    /* ??:?????????????? */
+    dbg_detect_confirmed++;
+    {
+        char tmp[32];
+        snprintf(tmp, sizeof(tmp), "DET:%u", cam_detection);
+        LCD_Show_String(0, 120, "DETECT OK");
+        LCD_Show_String(0, 136, tmp);
+    }
 }
 
 static int cam_is_skippable_line(const char *line)
@@ -217,6 +232,14 @@ static void cam_process_rx_line(void)
         }
 
         cam_apply_detection(frame_best_label, frame_max_conf);
+        /* ??:?????? */
+        dbg_lines_parsed++;
+        {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "%s", (char*)rx_buf);
+            LCD_Show_String(0, 152, "LINE PARSED");
+            LCD_Show_String(0, 168, tmp);
+        }
     }
 
     rx_idx = 0;
@@ -240,11 +263,46 @@ static void cam_handle_rx_byte(uint8_t byte)
     }
 }
 
+/* ????:???? '\\n' ????????????????????? */
+void cam_inject_string(const char *s)
+{
+    const uint8_t *p = (const uint8_t *)s;
+    while (p && *p)
+    {
+        /* ????????????(cam_handle_rx_byte ? static,??????????) */
+        cam_handle_rx_byte(*p++);
+        /* ???,?????(??????)?????;??????????? */
+        HAL_Delay(1);
+    }
+}
+
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART2)
     {
+        /* ????:????? */
+        dbg_rx_cb_count++;
+        {
+            char t[16];
+            snprintf(t, sizeof(t), "c:%02X", rx_char);
+            LCD_Show_String(0, 88, "RX CB");
+            LCD_Show_String(0, 104, t);
+        }
+
         cam_handle_rx_byte(rx_char);
+
+        /* ?????? */
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "I:%lu R:%lu L:%lu D:%lu",
+                     (unsigned long)dbg_init_count,
+                     (unsigned long)dbg_rx_cb_count,
+                     (unsigned long)dbg_lines_parsed,
+                     (unsigned long)dbg_detect_confirmed);
+            LCD_Show_String(0, 184, buf);
+        }
+
         HAL_UART_Receive_IT(&huart2, &rx_char, 1);
     }
 }
@@ -273,6 +331,19 @@ void cam_init(void)
 
     cam_detection  = CAM_VACANT;
     cam_data_ready = 0;
+
+    /* ???????(?? cam_init ???) */
+    dbg_init_count++;
+    LCD_Show_String(0, 40, "CAM INIT");
+    {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "I:%lu R:%lu L:%lu D:%lu",
+                 (unsigned long)dbg_init_count,
+                 (unsigned long)dbg_rx_cb_count,
+                 (unsigned long)dbg_lines_parsed,
+                 (unsigned long)dbg_detect_confirmed);
+        LCD_Show_String(0, 184, buf);
+    }
 
     __HAL_UART_CLEAR_OREFLAG(&huart2);
     __HAL_UART_CLEAR_FEFLAG(&huart2);

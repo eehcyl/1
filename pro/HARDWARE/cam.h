@@ -21,4 +21,6 @@ extern volatile uint8_t  cam_data_ready;      /* ????????1, main????0 */
 void    cam_init(void);
 uint8_t cam_Get(void);   /* ?? CAM_NONE / CAM_EBIKE / CAM_CAR / CAM_BOTH */
 
+void cam_inject_string(const char *s);
+
 #endif
