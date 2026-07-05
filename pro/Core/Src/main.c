@@ -217,7 +217,8 @@ int main(void)
 	}
 	
 	cam_init();
-
+	/* ????:????? cam_init() ?????????,??????? */
+	HAL_Delay(500);
 	
 	// NanoEdge AI
 	neai_state = neai_anomalydetection_init(use_pretrained);
@@ -232,8 +233,14 @@ int main(void)
 	
 	//MAX30102 FIFO
 	cache_counter = 0;
-	
-	
+		
+		/* ????:????????? cam ??(???????) */
+	HAL_Delay(500); // ?????
+	cam_inject_string("SUPINE\n");
+	HAL_Delay(200);
+	cam_inject_string("SUPINE\n");
+	HAL_Delay(200);
+	cam_inject_string("LEFT\n");   // ? "RIGHT\n", "PRONE\n", "VACANT\n"
 	
 	/* USER CODE END 2 */
 	
@@ -423,7 +430,7 @@ int main(void)
 			case CAM_VACANT:
 				sprintf(lcd_buf, "BODY:VACANT");
 				LCD_Show_String(0, 98, lcd_buf);
-				sprintf(lcd_buf, "POSTURE:N/A");
+				sprintf(lcd_buf, "POSTURE:NO");
 				LCD_Show_String(0, 112, lcd_buf);
 				break;
 
